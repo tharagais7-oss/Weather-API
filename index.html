@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeatherOS — Live Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Nunito',sans-serif; min-height:100vh; overflow-x:hidden; }
+
+    /* Animated gradient sky */
+    body::before {
+      content:''; position:fixed; inset:0; z-index:-2;
+      background:linear-gradient(160deg,#bfdbfe 0%,#e0f2fe 25%,#fef9c3 50%,#fce7f3 75%,#ede9fe 100%);
+      background-size:400% 400%; animation:skyShift 18s ease infinite;
+    }
+    @keyframes skyShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+    /* Soft blobs */
+    body::after {
+      content:''; position:fixed; inset:0; z-index:-1; pointer-events:none;
+      background:
+        radial-gradient(ellipse 600px 400px at 15% 20%,rgba(96,165,250,.18),transparent),
+        radial-gradient(ellipse 500px 350px at 85% 75%,rgba(251,191,36,.15),transparent),
+        radial-gradient(ellipse 400px 300px at 65% 15%,rgba(167,139,250,.13),transparent),
+        radial-gradient(ellipse 400px 300px at 5% 85%,rgba(34,197,94,.1),transparent);
+    }
+
+    /* Search bar rainbow border */
+    #searchBar {
+      background:rgba(255,255,255,.92);
+      backdrop-filter:blur(12px);
+      border-bottom:3px solid transparent;
+      border-image:linear-gradient(90deg,#3b82f6,#8b5cf6,#ec4899,#f59e0b,#22c55e) 1;
+      box-shadow:0 4px 30px rgba(59,130,246,.12);
+    }
+
+    /* Cards */
+    .card { background:white; border-radius:20px; box-shadow:0 4px 24px rgba(0,0,0,.06); transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease; overflow:hidden; }
+    .card:hover { transform:translateY(-6px) scale(1.01); box-shadow:0 14px 44px rgba(0,0,0,.12); }
+    .card-blue   { border-top:4px solid #3b82f6; }
+    .card-teal   { border-top:4px solid #14b8a6; }
+    .card-amber  { border-top:4px solid #f59e0b; }
+    .card-pink   { border-top:4px solid #ec4899; }
+    .card-violet { border-top:4px solid #8b5cf6; }
+    .card-green  { border-top:4px solid #22c55e; }
+    .card-orange { border-top:4px solid #f97316; }
+    .card-red    { border-top:4px solid #ef4444; }
+
+    /* Big temp */
+    .temp-hero { font-family:'Space Mono',monospace; font-size:clamp(4.5rem,13vw,8.5rem); font-weight:700; line-height:1; letter-spacing:-2px; background:linear-gradient(135deg,#3b82f6,#8b5cf6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+
+    /* Floating icon */
+    .icon-float { animation:float 3.5s ease-in-out infinite; display:inline-block; }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+
+    /* Pill badges */
+    .pill { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:99px; font-size:.75rem; font-weight:800; }
+    .pill-blue   { background:#dbeafe; color:#1d4ed8; }
+    .pill-teal   { background:#ccfbf1; color:#0f766e; }
+    .pill-amber  { background:#fef3c7; color:#92400e; }
+    .pill-pink   { background:#fce7f3; color:#9d174d; }
+    .pill-violet { background:#ede9fe; color:#5b21b6; }
+    .pill-green  { background:#dcfce7; color:#166534; }
+    .pill-orange { background:#ffedd5; color:#7c2d12; }
+    .pill-red    { background:#fee2e2; color:#991b1b; }
+
+    /* Chart */
+    .chart-line { fill:none; stroke:#3b82f6; stroke-width:3; stroke-linecap:round; }
+    .chart-area { fill:url(#cGrad); }
+    .chart-pt   { fill:white; stroke:#3b82f6; stroke-width:2.5; r:5; cursor:pointer; transition:r .2s; }
+    .chart-pt:hover { r:9; }
+    .chart-lbl  { font-size:11px; fill:#6b7280; text-anchor:middle; font-family:Nunito,sans-serif; }
+    .chart-tmp  { font-size:12px; fill:#1d4ed8; text-anchor:middle; font-family:Nunito,sans-serif; font-weight:800; }
+
+    /* AQ */
+    .aq-track { height:8px; background:#f3f4f6; border-radius:99px; overflow:hidden; }
+    .aq-fill  { height:100%; border-radius:99px; transition:width 1.2s cubic-bezier(.4,0,.2,1); }
+
+    /* UV ring */
+    .uv-circle { transition:stroke-dashoffset 1.2s cubic-bezier(.4,0,.2,1); }
+
+    /* Sun arc */
+    .sun-track { fill:none; stroke:#fde68a; stroke-width:4; stroke-linecap:round; }
+    .sun-fill  { fill:none; stroke:#f59e0b; stroke-width:4; stroke-linecap:round; transition:stroke-dashoffset 1.2s ease; }
+
+    /* Particles */
+    #particles { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+    .rain-drop  { position:absolute; width:2px; background:rgba(96,165,250,.55); border-radius:99px; animation:rainFall linear infinite; }
+    .snow-flake { position:absolute; background:rgba(200,220,255,.8); border-radius:50%; animation:snowDrift linear infinite; }
+    .cloud-puff { position:absolute; background:rgba(255,255,255,.65); border-radius:50%; filter:blur(18px); animation:cloudMove linear infinite; }
+    .sun-ray    { position:absolute; background:rgba(251,191,36,.18); border-radius:99px; animation:sunPulse ease-in-out infinite; }
+
+    @keyframes rainFall   { 0%{transform:translateY(-60px);opacity:.8} 100%{transform:translateY(110vh);opacity:.2} }
+    @keyframes snowDrift  { 0%{transform:translateY(-10px) rotate(0)} 100%{transform:translateY(110vh) rotate(720deg)} }
+    @keyframes cloudMove  { 0%{transform:translateX(-120%)} 100%{transform:translateX(120vw)} }
+    @keyframes sunPulse   { 0%,100%{opacity:.2;transform:scale(1)} 50%{opacity:.5;transform:scale(1.08)} }
+
+    /* Animations */
+    @keyframes fadeUp   { from{opacity:0;transform:translateY(28px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes popIn    { from{opacity:0;transform:scale(.82)} to{opacity:1;transform:scale(1)} }
+    @keyframes slideR   { from{opacity:0;transform:translateX(-18px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes spinBig  { from{transform:rotate(-180deg) scale(0);opacity:0} to{transform:rotate(0) scale(1);opacity:1} }
+    @keyframes barIn    { from{width:0%} }
+    @keyframes blink    { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.5)} 50%{box-shadow:0 0 0 10px rgba(34,197,94,0)} }
+
+    .a1 { animation:fadeUp .55s ease both .05s; }
+    .a2 { animation:fadeUp .55s ease both .13s; }
+    .a3 { animation:fadeUp .55s ease both .21s; }
+    .a4 { animation:fadeUp .55s ease both .29s; }
+    .a5 { animation:fadeUp .55s ease both .37s; }
+    .a6 { animation:fadeUp .55s ease both .45s; }
+    .apop { animation:popIn .5s cubic-bezier(.34,1.56,.64,1) both .1s; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:99px; }
+
+    /* Hourly card */
+    .h-card { min-width:78px; text-align:center; border-radius:16px; padding:10px 8px; transition:transform .25s ease,box-shadow .25s ease; cursor:default; flex-shrink:0; }
+    .h-card:hover { transform:translateY(-8px) scale(1.07); box-shadow:0 8px 24px rgba(0,0,0,.1); }
+
+    /* Forecast row */
+    .f-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:12px; transition:background .2s,transform .2s; cursor:default; }
+    .f-row:hover { background:#f0f9ff; transform:translateX(5px); }
+
+    /* Loading */
+    #loadingScreen { position:fixed; inset:0; z-index:9999; background:linear-gradient(135deg,#bfdbfe,#ede9fe); display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity .6s ease,visibility .6s ease; }
+    #loadingScreen.hidden { opacity:0; visibility:hidden; }
+
+    /* Autocomplete */
+    #autocompleteList { display:none; position:absolute; top:100%; left:0; right:0; background:white; border-radius:0 0 16px 16px; box-shadow:0 8px 32px rgba(0,0,0,.1); z-index:200; max-height:220px; overflow-y:auto; }
+    #autocompleteList li { padding:10px 20px; font-size:.9rem; color:#374151; cursor:pointer; font-weight:600; display:flex; align-items:center; gap:8px; transition:background .15s; }
+    #autocompleteList li:hover { background:#f0f9ff; }
+
+    /* Dashboard grid */
+    @media (min-width:1024px) {
+      .dash-grid { display:grid; grid-template-columns:340px 1fr 290px; gap:18px; align-items:start; }
+    }
+
+    /* Wind direction arrow */
+    #compassNeedle { transform-origin:40px 40px; transition:transform .9s cubic-bezier(.34,1.56,.64,1); }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loadingScreen">
+  <div class="relative mb-5">
+    <div class="w-20 h-20 rounded-full border-4 border-blue-200 border-t-blue-500 animate-spin"></div>
+    <div class="absolute inset-0 flex items-center justify-center">
+      <i class="fa-solid fa-cloud-sun text-amber-400 text-2xl icon-float"></i>
+    </div>
+  </div>
+  <p class="text-blue-600 font-black text-sm tracking-widest uppercase">Loading WeatherOS</p>
+  <p class="text-blue-400 text-xs mt-1 font-semibold">Fetching live data…</p>
+</div>
+
+<!-- Particles layer -->
+<div id="particles"></div>
+
+<!-- =====================================================
+     SEARCH BAR — sticky, full width, rainbow bottom border
+===================================================== -->
+<div id="searchBar" class="sticky top-0 z-50 w-full px-4 md:px-6 py-3">
+  <div class="relative w-full">
+    <div class="flex items-center gap-3 bg-white rounded-2xl border border-blue-100 px-5 py-3 shadow-sm w-full">
+      <i class="fa-solid fa-cloud-sun text-amber-400 text-xl shrink-0"></i>
+      <span class="text-gray-800 font-black text-base hidden sm:block shrink-0">WeatherOS</span>
+      <div class="w-px h-5 bg-gray-200 hidden sm:block shrink-0"></div>
+      <i class="fa-solid fa-magnifying-glass text-blue-400 shrink-0"></i>
+      <input id="citySearch" type="text" placeholder="Search any city worldwide — e.g. Tokyo, Paris, New York…"
+        class="flex-1 text-gray-700 placeholder-gray-400 outline-none text-sm font-bold bg-transparent min-w-0"
+        oninput="suggestCities()" onkeydown="if(event.key==='Enter') searchCity()" />
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="detectLocation()" title="Detect my location"
+          class="text-teal-500 hover:text-teal-700 text-lg transition-colors hover:scale-110 active:scale-95">
+          <i class="fa-solid fa-location-crosshairs"></i>
+        </button>
+        <button onclick="searchCity()"
+          class="bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-600 hover:to-violet-600 text-white px-5 py-2 rounded-xl font-black text-sm transition-all hover:scale-105 active:scale-95 shadow-md">
+          Search
+        </button>
+      </div>
+    </div>
+    <ul id="autocompleteList"></ul>
+  </div>
+</div>
+
+<!-- =====================================================
+     MAIN APP
+===================================================== -->
+<div id="app" class="relative z-10 px-4 md:px-6 pb-10 pt-4">
+
+  <!-- Header row -->
+  <div class="flex items-center justify-between mb-5 a1">
+    <div>
+      <h2 class="text-xl font-black text-gray-700 flex items-center gap-2">
+        <i class="fa-solid fa-chart-bar text-blue-500"></i> Live Weather Dashboard
+      </h2>
+      <p class="text-gray-400 text-xs mt-0.5 font-semibold">Real-time conditions &amp; 7-day outlook</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="greeting" class="text-gray-500 text-sm font-bold hidden md:block"></span>
+      <div class="pill pill-blue">
+        <i class="fa-solid fa-satellite-dish text-blue-500 text-xs"></i>
+        <span id="currentTime" class="font-mono">--:--</span>
+      </div>
+      <div id="liveBadge" class="pill pill-green hidden">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" style="animation:blink 2s infinite"></span>
+        LIVE
+      </div>
+    </div>
+  </div>
+
+  <!-- SUMMARY STATS — 5 coloured cards across top -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5 a2">
+    <div class="card card-blue p-4 flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center shrink-0">
+        <i class="fa-solid fa-temperature-half text-blue-500 text-2xl"></i>
+      </div>
+      <div><p class="text-gray-400 text-xs font-bold uppercase">Temp</p><p id="summaryTemp" class="text-gray-800 font-black text-2xl">--°</p></div>
+    </div>
+    <div class="card card-teal p-4 flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl bg-teal-100 flex items-center justify-center shrink-0">
+        <i class="fa-solid fa-droplet text-teal-500 text-2xl"></i>
+      </div>
+      <div><p class="text-gray-400 text-xs font-bold uppercase">Humidity</p><p id="summaryHumidity" class="text-gray-800 font-black text-2xl">--%</p></div>
+    </div>
+    <div class="card card-amber p-4 flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+        <i class="fa-solid fa-wind text-amber-500 text-2xl"></i>
+      </div>
+      <div><p class="text-gray-400 text-xs font-bold uppercase">Wind</p><p id="summaryWind" class="text-gray-800 font-black text-xl">-- m/s</p></div>
+    </div>
+    <div class="card card-violet p-4 flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl bg-violet-100 flex items-center justify-center shrink-0">
+        <i class="fa-solid fa-eye text-violet-500 text-2xl"></i>
+      </div>
+      <div><p class="text-gray-400 text-xs font-bold uppercase">Visibility</p><p id="summaryVis" class="text-gray-800 font-black text-xl">--</p></div>
+    </div>
+    <div class="card card-pink p-4 flex items-center gap-3">
+      <div class="w-12 h-12 rounded-2xl bg-pink-100 flex items-center justify-center shrink-0">
+        <i class="fa-solid fa-gauge text-pink-500 text-2xl"></i>
+      </div>
+      <div><p class="text-gray-400 text-xs font-bold uppercase">Pressure</p><p id="summaryPressure" class="text-gray-800 font-black text-lg">-- hPa</p></div>
+    </div>
+  </div>
+
+  <!-- MAIN DASHBOARD GRID -->
+  <div class="dash-grid">
+
+    <!-- ============ LEFT ============ -->
+    <div class="space-y-4">
+
+      <!-- HERO card -->
+      <div class="card card-blue p-6 apop a1">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <div class="flex items-center gap-1.5 mb-1">
+              <i class="fa-solid fa-location-pin text-red-400"></i>
+              <span id="cityName" class="text-gray-800 font-black text-xl">--</span>
+            </div>
+            <p id="currentDate" class="text-gray-400 text-xs font-semibold"></p>
+          </div>
+          <span id="weatherConditionPill" class="pill pill-blue"><i class="fa-solid fa-circle-info"></i> --</span>
+        </div>
+        <div class="flex items-end gap-2 mb-4">
+          <div>
+            <div class="flex items-start">
+              <span id="currentTemp" class="temp-hero">--</span>
+              <span class="text-3xl font-bold text-blue-400 mt-4">°C</span>
+            </div>
+            <p id="weatherDescription" class="text-gray-500 capitalize font-bold text-sm mt-1"></p>
+          </div>
+          <div id="weatherIconWrap" class="icon-float ml-auto text-6xl md:text-7xl leading-none"></div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="rounded-2xl bg-blue-50 p-3 text-center">
+            <p class="text-blue-300 text-xs font-black uppercase">Feels</p>
+            <p id="feelsLike" class="text-blue-700 font-black text-lg">--°</p>
+          </div>
+          <div class="rounded-2xl bg-amber-50 p-3 text-center">
+            <p class="text-amber-300 text-xs font-black uppercase">Min</p>
+            <p id="tempMin" class="text-amber-700 font-black text-lg">--°</p>
+          </div>
+          <div class="rounded-2xl bg-red-50 p-3 text-center">
+            <p class="text-red-300 text-xs font-black uppercase">Max</p>
+            <p id="tempMax" class="text-red-600 font-black text-lg">--°</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sunrise / Sunset -->
+      <div class="card card-amber p-5 a2">
+        <p class="text-xs font-black text-amber-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-sun"></i> Sun Schedule
+        </p>
+        <div class="flex items-center justify-around">
+          <div class="text-center">
+            <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-1">
+              <i class="fa-solid fa-sunrise text-amber-500 text-xl"></i>
+            </div>
+            <p class="text-gray-400 text-xs font-black">Sunrise</p>
+            <p id="sunrise" class="text-gray-800 font-black text-base">--:--</p>
+          </div>
+          <svg width="100" height="56" viewBox="0 0 110 60">
+            <path class="sun-track" d="M5 55 A50 50 0 0 1 105 55"/>
+            <path id="sunArcFill" class="sun-fill" d="M5 55 A50 50 0 0 1 105 55" stroke-dasharray="157" stroke-dashoffset="120"/>
+            <circle id="sunDot" cx="55" cy="5" r="6" fill="#f59e0b"/>
+          </svg>
+          <div class="text-center">
+            <div class="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-1">
+              <i class="fa-solid fa-moon text-indigo-500 text-xl"></i>
+            </div>
+            <p class="text-gray-400 text-xs font-black">Sunset</p>
+            <p id="sunset" class="text-gray-800 font-black text-base">--:--</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- UV -->
+      <div class="card card-orange p-5 a3">
+        <p class="text-xs font-black text-orange-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-radiation"></i> UV Index
+        </p>
+        <div class="flex items-center gap-4 mb-3">
+          <div class="relative w-20 h-20 shrink-0">
+            <svg class="w-full h-full -rotate-90" viewBox="0 0 56 56">
+              <circle cx="28" cy="28" r="22" fill="none" stroke="#fde68a" stroke-width="6"/>
+              <circle id="uvRing" cx="28" cy="28" r="22" fill="none" stroke="#f97316"
+                stroke-width="6" stroke-linecap="round" stroke-dasharray="138" stroke-dashoffset="138" class="uv-circle"/>
+            </svg>
+            <span id="uvIndex" class="absolute inset-0 flex items-center justify-center text-orange-600 font-black text-2xl">--</span>
+          </div>
+          <div>
+            <p id="uvLabel" class="text-gray-800 font-black text-2xl">--</p>
+            <p id="uvAdvice" class="text-orange-500 text-xs font-bold mt-1">--</p>
+          </div>
+        </div>
+        <div class="h-3 rounded-full" style="background:linear-gradient(90deg,#4ade80,#fbbf24,#f97316,#ef4444,#a855f7)"></div>
+        <div class="flex justify-between text-xs text-gray-400 font-bold mt-1">
+          <span>Low</span><span>Mod</span><span>High</span><span>V.High</span><span>Ext</span>
+        </div>
+      </div>
+
+      <!-- Dew point + extra -->
+      <div class="grid grid-cols-2 gap-3 a4">
+        <div class="card card-teal p-4 text-center">
+          <i class="fa-solid fa-water text-teal-500 text-2xl mb-2 block"></i>
+          <p id="dewPoint" class="text-gray-800 font-black text-xl">--°</p>
+          <p class="text-gray-400 text-xs font-bold mt-0.5">Dew Point</p>
+        </div>
+        <div class="card card-pink p-4 text-center">
+          <i class="fa-solid fa-cloud text-pink-500 text-2xl mb-2 block"></i>
+          <p id="cloudiness" class="text-gray-800 font-black text-xl">--%</p>
+          <p class="text-gray-400 text-xs font-bold mt-0.5">Cloud Cover</p>
+        </div>
+      </div>
+
+    </div><!-- /LEFT -->
+
+    <!-- ============ MIDDLE ============ -->
+    <div class="space-y-4">
+
+      <!-- HOURLY -->
+      <div class="card card-blue p-5 a2">
+        <p class="text-xs font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-clock"></i> 24-Hour Forecast
+        </p>
+        <div id="hourlyForecast" class="flex gap-3 overflow-x-auto pb-1 snap-x"></div>
+      </div>
+
+      <!-- CHART -->
+      <div class="card card-violet p-5 a3">
+        <p class="text-xs font-black text-violet-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-chart-area"></i> Temperature Trend
+        </p>
+        <div class="overflow-x-auto">
+          <svg id="tempChart" width="100%" height="175" viewBox="0 0 600 175" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="cGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="rgba(59,130,246,.3)"/>
+                <stop offset="100%" stop-color="rgba(59,130,246,0)"/>
+              </linearGradient>
+            </defs>
+            <path id="chartArea" class="chart-area" d="M50,120 L550,120 L550,155 L50,155 Z"/>
+            <path id="chartLine" class="chart-line" d="M50,120 C150,90 250,110 350,70 C450,80 550,110 550,110"/>
+            <circle cx="50"  cy="120" class="chart-pt" id="cp0"/>
+            <circle cx="150" cy="90"  class="chart-pt" id="cp1"/>
+            <circle cx="250" cy="110" class="chart-pt" id="cp2"/>
+            <circle cx="350" cy="70"  class="chart-pt" id="cp3"/>
+            <circle cx="450" cy="80"  class="chart-pt" id="cp4"/>
+            <circle cx="550" cy="110" class="chart-pt" id="cp5"/>
+            <text x="50"  y="168" class="chart-lbl" id="cl0">Now</text>
+            <text x="150" y="168" class="chart-lbl" id="cl1">--</text>
+            <text x="250" y="168" class="chart-lbl" id="cl2">--</text>
+            <text x="350" y="168" class="chart-lbl" id="cl3">--</text>
+            <text x="450" y="168" class="chart-lbl" id="cl4">--</text>
+            <text x="550" y="168" class="chart-lbl" id="cl5">--</text>
+            <text x="50"  y="108" class="chart-tmp" id="ct0">--°</text>
+            <text x="150" y="78"  class="chart-tmp" id="ct1">--°</text>
+            <text x="250" y="98"  class="chart-tmp" id="ct2">--°</text>
+            <text x="350" y="58"  class="chart-tmp" id="ct3">--°</text>
+            <text x="450" y="68"  class="chart-tmp" id="ct4">--°</text>
+            <text x="550" y="98"  class="chart-tmp" id="ct5">--°</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 7-DAY FORECAST -->
+      <div class="card card-teal p-5 a4">
+        <p class="text-xs font-black text-teal-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-calendar-week"></i> 7-Day Forecast
+        </p>
+        <div id="forecastCards" class="space-y-1"></div>
+      </div>
+
+      <!-- LIVE STATUS -->
+      <div class="card card-pink p-5 a5">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="w-2.5 h-2.5 rounded-full bg-green-400 block shrink-0" style="animation:blink 2s infinite"></span>
+          <p class="text-xs font-black text-pink-500 uppercase tracking-widest">Live Conditions Summary</p>
+        </div>
+        <p id="weatherSummary" class="text-gray-600 text-sm leading-relaxed font-semibold">Fetching weather data…</p>
+        <div class="mt-3 flex flex-wrap gap-2" id="conditionTags"></div>
+      </div>
+
+    </div><!-- /MIDDLE -->
+
+    <!-- ============ RIGHT ============ -->
+    <div class="space-y-4">
+
+      <!-- AIR QUALITY -->
+      <div class="card card-green p-5 a1">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-xs font-black text-green-600 uppercase tracking-widest flex items-center gap-2">
+            <i class="fa-solid fa-leaf"></i> Air Quality
+          </p>
+          <span id="aqiBadge" class="pill pill-green">AQI --</span>
+        </div>
+        <div class="flex items-center gap-4 mb-4">
+          <div class="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center shrink-0">
+            <p id="aqiValue" class="text-green-600 font-black text-3xl">--</p>
+          </div>
+          <div>
+            <p id="aqiLabel" class="text-gray-700 font-black text-lg">--</p>
+            <p class="text-gray-400 text-xs font-semibold">Air Quality Index</p>
+          </div>
+        </div>
+        <div class="space-y-2.5">
+          <div>
+            <div class="flex justify-between text-xs font-bold text-gray-500 mb-1">
+              <span><i class="fa-solid fa-circle text-green-400 mr-1 text-xs"></i>PM2.5</span>
+              <span id="pm25">-- µg/m³</span>
+            </div>
+            <div class="aq-track"><div id="pm25Bar" class="aq-fill bg-green-400" style="width:0"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs font-bold text-gray-500 mb-1">
+              <span><i class="fa-solid fa-circle text-yellow-400 mr-1 text-xs"></i>PM10</span>
+              <span id="pm10">-- µg/m³</span>
+            </div>
+            <div class="aq-track"><div id="pm10Bar" class="aq-fill bg-yellow-400" style="width:0"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs font-bold text-gray-500 mb-1">
+              <span><i class="fa-solid fa-circle text-blue-400 mr-1 text-xs"></i>NO₂</span>
+              <span id="no2">-- µg/m³</span>
+            </div>
+            <div class="aq-track"><div id="no2Bar" class="aq-fill bg-blue-400" style="width:0"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs font-bold text-gray-500 mb-1">
+              <span><i class="fa-solid fa-circle text-orange-400 mr-1 text-xs"></i>O₃ Ozone</span>
+              <span id="o3">-- µg/m³</span>
+            </div>
+            <div class="aq-track"><div id="o3Bar" class="aq-fill bg-orange-400" style="width:0"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WIND COMPASS -->
+      <div class="card card-teal p-5 a2">
+        <p class="text-xs font-black text-teal-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-compass"></i> Wind Compass
+        </p>
+        <div class="flex items-center gap-5">
+          <div class="relative w-24 h-24 shrink-0">
+            <svg viewBox="0 0 80 80" class="w-full h-full">
+              <circle cx="40" cy="40" r="36" fill="#f0fdf4" stroke="#86efac" stroke-width="2"/>
+              <circle cx="40" cy="40" r="2" fill="#6b7280"/>
+              <!-- cardinal marks -->
+              <text x="40" y="11"  text-anchor="middle" font-size="9" font-weight="900" fill="#16a34a" font-family="Nunito">N</text>
+              <text x="40" y="74"  text-anchor="middle" font-size="9" font-weight="900" fill="#9ca3af" font-family="Nunito">S</text>
+              <text x="7"  y="43"  text-anchor="middle" font-size="9" font-weight="900" fill="#9ca3af" font-family="Nunito">W</text>
+              <text x="73" y="43"  text-anchor="middle" font-size="9" font-weight="900" fill="#9ca3af" font-family="Nunito">E</text>
+              <g id="compassNeedle">
+                <polygon points="40,14 43,40 40,47 37,40" fill="#ef4444"/>
+                <polygon points="40,66 43,40 40,33 37,40" fill="#d1d5db"/>
+              </g>
+            </svg>
+          </div>
+          <div>
+            <p id="windDirText" class="text-gray-800 font-black text-3xl">--</p>
+            <p class="text-gray-400 text-xs font-bold">Direction</p>
+            <p id="windSpeedFull" class="text-teal-600 font-black text-lg mt-2">-- m/s</p>
+            <p id="windGust" class="text-gray-400 text-xs font-semibold">Gust: --</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- HIGHLIGHTS -->
+      <div class="card card-violet p-5 a3">
+        <p class="text-xs font-black text-violet-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-bolt"></i> Highlights
+        </p>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="rounded-xl bg-blue-50 p-3">
+            <i class="fa-solid fa-gauge text-blue-400 mb-1 block"></i>
+            <p class="text-gray-400 text-xs font-bold">Sea Level</p>
+            <p id="seaPressure" class="text-gray-800 font-black text-sm">-- hPa</p>
+          </div>
+          <div class="rounded-xl bg-teal-50 p-3">
+            <i class="fa-solid fa-arrow-down text-teal-400 mb-1 block"></i>
+            <p class="text-gray-400 text-xs font-bold">Ground Lvl</p>
+            <p id="groundPressure" class="text-gray-800 font-black text-sm">-- hPa</p>
+          </div>
+          <div class="rounded-xl bg-amber-50 p-3">
+            <i class="fa-solid fa-cloud-rain text-amber-400 mb-1 block"></i>
+            <p class="text-gray-400 text-xs font-bold">Rain 3h</p>
+            <p id="rain3h" class="text-gray-800 font-black text-sm">-- mm</p>
+          </div>
+          <div class="rounded-xl bg-violet-50 p-3">
+            <i class="fa-solid fa-snowflake text-violet-400 mb-1 block"></i>
+            <p class="text-gray-400 text-xs font-bold">Snow 3h</p>
+            <p id="snow3h" class="text-gray-800 font-black text-sm">-- mm</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISIBILITY card -->
+      <div class="card card-pink p-5 a4">
+        <p class="text-xs font-black text-pink-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-eye"></i> Visibility
+        </p>
+        <div class="flex items-center gap-4">
+          <div class="w-16 h-16 rounded-2xl bg-pink-100 flex items-center justify-center shrink-0">
+            <i class="fa-solid fa-eye text-pink-500 text-3xl"></i>
+          </div>
+          <div>
+            <p id="visibility" class="text-gray-800 font-black text-3xl">--</p>
+            <p class="text-gray-400 text-xs font-bold mt-0.5">kilometres</p>
+          </div>
+        </div>
+        <div class="mt-3">
+          <div class="h-3 rounded-full bg-gradient-to-r from-red-400 via-amber-400 to-green-400"></div>
+          <div class="flex justify-between text-xs text-gray-400 font-bold mt-1"><span>Poor</span><span>Moderate</span><span>Excellent</span></div>
+        </div>
+      </div>
+
+    </div><!-- /RIGHT -->
+
+  </div><!-- /dash-grid -->
+</div><!-- /app -->
+
+<script src="index.js"></script>
+</body>
+</html>
